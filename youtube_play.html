@@ -1,0 +1,347 @@
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <style type="text/css">
+            * {
+                /* border: 1px solid black; */
+                border-style: none;
+                margin: 0px;
+                padding: 0px;
+
+            }
+            html,body {
+                background: #d4e1f5;
+            }
+        </style>
+        <script type="text/javascript">
+            ////////////////////////////////////////////////////////////////////////////////
+            // Youtube IFrame Player API初期化
+            ////////////////////////////////////////////////////////////////////////////////
+            
+            // Youtube IFrame Player API読み込む
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube.com/iframe_api";
+            var firstScriptTag = document.getElementsByTagName('script')[0];
+            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+            // #playerタグにYoutube IFrame Playerを作成する
+            var player;
+            function onYouTubeIframeAPIReady() {
+                player = new YT.Player('player', {
+                    width: '640',               // 動画横サイズ
+                    height: '360',              // 動画縦サイズ
+                    events : {
+                        'onStateChange' : onPlayStateChange
+                    },
+                });
+            }
+
+            // 動画一時停止中かどうか(動画移行時に一時停止するかどうか)
+            var g_isPlayerPaused = false;
+            // 再生の状態が変化した場合に呼び出されるコールバック
+            function onPlayStateChange(event) {
+                // 再生が終了したら次の動画を再生する
+                if (event.data == YT.PlayerState.ENDED) {
+                    debug_log("State changed to ENDED");
+                    if(g_isPlayerPaused) loadMovie(nextMovie());
+                    else loadAndPlayMovie(nextMovie());
+                }
+                // 一時停止中に次の動画へ移行した場合、(自動)再生直後に一時停止する
+                else if (event.data == YT.PlayerState.PAUSED) {
+                    debug_log("State changed to PAUSED");
+                    g_isPlayerPaused = true;
+                }
+                else if (event.data == YT.PlayerState.PLAYING) {
+                    debug_log("State changed to PLAYING");
+                    g_isPlayerPaused = false;
+                }
+            }
+
+            function stateToString(state) {
+                let strState = "";
+                if(state == YT.PlayerState.UNSTARTED) strState = "UNSTARTED";
+                else if(state == YT.PlayerState.ENDED) strState = "ENDED";
+                else if(state == YT.PlayerState.PLAYING) strState = "PLAYING";
+                else if(state == YT.PlayerState.PAUSED) strState = "PAUSED";
+                else if(state == YT.PlayerState.BUFFERING) strState = "BUFFERING";
+                else if(state == 5) strState = "VIDEO CUED";
+                else strState = "unknown";
+                strState += " (" + state + ")"
+                return(strState);
+            }
+
+            // 動画がロード済みかどうか確認する(動画情報を取得できるかどうか)
+            function isPlayerLoaded() {
+                let state = player.getPlayerState();
+                // if(state == YT.PlayerState.UNSTARTED) return(false);
+                // else if(state == YT.PlayerState.ENDED) return(false);
+                if(state == YT.PlayerState.PLAYING) return(true);
+                else if(state == YT.PlayerState.PAUSED) return(true);
+                else if(state == YT.PlayerState.BUFFERING) return(true);
+                else return(false);
+            }
+
+            // 動画が再生中かどうか確認する
+            function isPlayerPlaying() {
+                let state = player.getPlayerState();
+                debug_log("[STATE]: " + stateToString(state));
+                if(state == YT.PlayerState.PLAYING) return(true);
+                else return(false);
+            }
+
+            // 動画が一時停止中かどうか確認する
+            function isPlayerPaused() {
+                let state = player.getPlayerState();
+                debug_log("[STATE]: " + stateToString(state));
+                if(state == YT.PlayerState.PAUSED) return(true);
+                else return(false);
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // 再生中の動画情報表示
+            ////////////////////////////////////////////////////////////////////////////////
+            
+            // 秒数値を時間表示文字列('00:00:00.0')に変換する
+            function toTimeString(tm) {
+                if(isPlayerLoaded()) {
+                    let hour = Math.floor(tm / 60 / 60);
+                    let min = Math.floor((tm - hour * 60 * 60) / 60);
+                    let sec = Math.floor(tm - hour * 60 * 60 - min * 60);
+                    let dsec = Math.round((tm - Math.floor(tm)) * 10);
+                    let str_tm = min.toString().padStart(2, '0') + ":"
+                                + sec.toString().padStart(2, '0')
+                                + "." + dsec.toString()
+                    if(hour > 0) str_tm = hour.toString().padStart(2, '0') + ":" + str_tm;
+                    return(str_tm);
+                }
+                else {
+                    return("--:--:--.-");
+                }
+            }
+
+            // タイマーコールバック
+            function onTimerVideoInfo() {
+                // 動画情報
+                let title = player.videoTitle;
+                let text_video_info =
+                    title;
+                target = document.getElementById("video_info");
+                target.innerHTML = text_video_info;
+                // 再生情報
+                let cur_tm = player.getCurrentTime().toFixed(1);
+                let mov_tm = player.getDuration().toFixed(1);
+                let play_speed = player.getPlaybackRate().toFixed(2);
+                let text_play_info =
+                    toTimeString(cur_tm) + " / " + toTimeString(mov_tm)
+                    + ", " + "(x" + play_speed.toString() + ")";
+                target = document.getElementById("play_info");
+                target.innerHTML = text_play_info;
+            }
+            
+            // 初期化処理
+            window.onload = function onLoad() {
+                // タイマーセット
+                let intervalID = setInterval(onTimerVideoInfo, 100);
+                // デバッグログをクリア
+                clear_debug_log();
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // 動画再生
+            ////////////////////////////////////////////////////////////////////////////////
+
+            // 動画IDを指定して動画を読み込む(再生はされない)
+            function loadMovie(vid) {
+                debug_log("loadMovie('" + vid + "')")
+                if(vid) {
+                    player.cueVideoById({videoId: vid});
+                    pauseMovie();
+                }
+            }
+
+            // 動画IDを指定して動画を再生する
+            function loadAndPlayMovie(vid) {
+                debug_log("loadAndPlayMovie('" + vid + "')")
+                if(vid) {
+                    player.loadVideoById({videoId: vid});
+                }
+            }
+            // 動画を再生する
+            function resumeMovie() {
+                debug_log("resumeMovie()");
+                player.playVideo();
+            }
+            // 動画再生を停止する
+            function stopMovie() {
+                debug_log("stopMovie()");
+                player.stopVideo();
+            }
+            // 動画再生を一時停止する
+            function pauseMovie() {
+                debug_log("pauseMovie()");
+                player.pauseVideo();
+            }
+            // 指定した秒数だけ動画を進める
+            function forwardMovie(tm) {
+                debug_log("forwardMovie(" + tm + ")");
+                let target_tm = player.getCurrentTime() + tm;
+                let duration = player.getDuration();
+                if(target_tm > duration) target_tm = duration;
+                let bLastPlaying = isPlayerPlaying();
+                player.seekTo(target_tm, true);
+                if(bLastPlaying) player.playVideo();
+            }
+            // 指定した秒数だけ動画を戻る
+            function backwardMovie(tm) {
+                debug_log("backwardMovie(" + tm + ")");
+                let target_tm = player.getCurrentTime() - tm;
+                if(target_tm < 0) target_tm = 0;
+                let bLastPlaying = isPlayerPlaying();
+                player.seekTo(target_tm, true);
+                if(bLastPlaying) player.playVideo();
+            }
+            // 再生速度を遅くする
+            function playSlow() {
+                debug_log("playSlow()");
+                let speeds = player.getAvailablePlaybackRates();
+                let current_speed = player.getPlaybackRate();
+                for(let i = 0; i < speeds.length; i++) {
+                    if(current_speed == speeds[i]) {
+                        if(i > 0) {
+                            player.setPlaybackRate(speeds[i - 1]);
+                            break;
+                        }
+                    }
+                }
+            }
+            // 再生速度を速くする
+            function playFast() {
+                debug_log("playFast()");
+                let speeds = player.getAvailablePlaybackRates();
+                let current_speed = player.getPlaybackRate();
+                for(let i = speeds.length - 1; i >= 0; i--) {
+                    if(current_speed == speeds[i]) {
+                        if(i <  speeds.length - 1) {
+                            player.setPlaybackRate(speeds[i + 1]);
+                            break;
+                        }
+                    }
+                }
+            }
+            // 次の曲へ
+            function playNext() {
+                debug_log("playNext()");
+                if(isPlayerPlaying()) loadAndPlayMovie(nextMovie());
+                else loadMovie(nextMovie());
+            }
+            // 前の曲へ
+            function playPrev() {
+                debug_log("playPrev()");
+                if(isPlayerPlaying()) loadAndPlayMovie(prevMovie());
+                else loadMovie(prevMovie());
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // 動画自動再生
+            ////////////////////////////////////////////////////////////////////////////////
+
+            // Youtube動画再生リスト(IDのリスト)
+            const MovieIdList = [
+                '9KkH0JphqTc',      // 角島灯台(夜)
+                '-UNxfP_I7gU',      // 剱埼灯台(夜)
+                'hweQjX8HvPo',      // 洲埼灯台(夜)
+                'Nn_sC7l44eM',      // 襟裳岬灯台(夜)
+                'tPSR3BSUKzE',      // チキウ岬灯台(夜)
+                'DGJRhdpVz-c',      // 野島埼灯台(夜)
+                '62iTgPB8RgM',      // 室戸岬灯台(夜)
+                'EmvJupUErTE',      // 灯台スライドショー
+                'hjHOMbUFH_o'       // 灯台スライドショーその2
+            ];
+            // 今再生中の動画のリストインデックス
+            var nCurrentMovieId = 0;
+            // 今再生中の動画IDを取得する
+            function currentMovieId() {
+                return MovieIdList[nCurrentMovieId];
+            }
+            // 次の動画IDを取得する
+            function nextMovie() {
+                nCurrentMovieId++;
+                if(nCurrentMovieId >= MovieIdList.length) nCurrentMovieId = 0;
+                return MovieIdList[nCurrentMovieId];
+            }
+            // 前の動画IDを取得する
+            function prevMovie() {
+                nCurrentMovieId--;
+                if(nCurrentMovieId < 0) nCurrentMovieId = MovieIdList.length - 1;
+                return MovieIdList[nCurrentMovieId];
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////
+            // デバッグ用
+            ////////////////////////////////////////////////////////////////////////////////
+
+            // デバッグ用テキストボックスにログメッセージを表示する
+            function debug_log(text) {
+                target = document.getElementById("debug_box");
+                let tmp_text = target.innerHTML;
+                target.innerHTML = text + "<br/>" + tmp_text;
+            }
+            // デバッグ用テキストボックスの内容をクリアする
+            function clear_debug_log() {
+                target = document.getElementById("debug_box");
+                target.innerHTML = "";
+            }
+
+        </script>
+    </head>
+    <body style="width:100%;height:100%;">
+        <table style="width:100%;height:100%;">
+            <tr style="width:100%;height:100%;">
+                <td style="width:25%;height:100%;">
+                    <p><a href="javascript:loadAndPlayMovie('9KkH0JphqTc')">角島灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('-UNxfP_I7gU')">剱埼灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('hweQjX8HvPo')">洲埼灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('Nn_sC7l44eM')">襟裳岬灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('tPSR3BSUKzE')">チキウ岬灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('DGJRhdpVz-c')">野島埼灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('62iTgPB8RgM')">室戸岬灯台(夜)</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('EmvJupUErTE')">灯台スライドショー</a></p>
+                    <p><a href="javascript:loadAndPlayMovie('hjHOMbUFH_o')">灯台スライドショーその2</a></p>
+                    <br/>
+                    <p><a href="javascript:stopMovie()">停止</a></p>
+                    <p><a href="javascript:pauseMovie()">一時停止</a></p>
+                    <p><a href="javascript:resumeMovie()">再生</a></p>
+                    <p><a href="javascript:backwardMovie(10)">10秒戻る</a></p>
+                    <p><a href="javascript:forwardMovie(10)">10秒進む</a></p>
+                    <p><a href="javascript:playSlow()">再生速度低下</a></p>
+                    <p><a href="javascript:playFast()">再生速度上昇</a></p>
+                    <p><a href="javascript:playPrev()">前の動画</a></p>
+                    <p><a href="javascript:playNext()">次の動画</a></p>
+                </td>
+                <td style="width:50%;height:100%;">
+                    <div style="width:100%;height:20%;display:flex;justify-content:center;align-items:center;">
+                            <h1 id="video_info" style="font-weight:bold;"></h1>
+                    </div>
+                    <div id="player" style="width:100%;height:60%;"></div>
+                    <div style="width:100%;height:20%;">
+                        <p id="play_info"></p>
+                    </div>
+                </td>
+                <td style="width:25%;height:100%;">
+                    <div style="width:90%;height:90%;margin:5%;overflow:auto;">
+                        <div style="width:100%;height:5%;">
+                            <table style="width:100%;height:100%;">
+                                <tr>
+                                    <td style="width:50%;height:100%;"><p>[Debug Log]</p></td>
+                                    <td style="width:50%;height:100%;"><p style="text-align:right;"><a href="javascript:clear_debug_log()">クリア</a></p></td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div id="debug_box" style="width:100%;height:95%;overflow-y:scroll;white-space:pre-wrap;word-wrap:break-word;background-color:whitesmoke;">
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+    </body>
+</html>
