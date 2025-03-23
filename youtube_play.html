@@ -187,18 +187,18 @@
                 let target_tm = player.getCurrentTime() + tm;
                 let duration = player.getDuration();
                 if(target_tm > duration) target_tm = duration;
-                let bLastPlaying = isPlayerPlaying();
+                // let bLastPlaying = isPlayerPlaying();
                 player.seekTo(target_tm, true);
-                if(bLastPlaying) player.playVideo();
+                // if(bLastPlaying) player.playVideo();
             }
             // 指定した秒数だけ動画を戻る
             function backwardMovie(tm) {
                 debug_log("backwardMovie(" + tm + ")");
                 let target_tm = player.getCurrentTime() - tm;
                 if(target_tm < 0) target_tm = 0;
-                let bLastPlaying = isPlayerPlaying();
+                // let bLastPlaying = isPlayerPlaying();
                 player.seekTo(target_tm, true);
-                if(bLastPlaying) player.playVideo();
+                // if(bLastPlaying) player.playVideo();
             }
             // 再生速度を遅くする
             function playSlow() {
