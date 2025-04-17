@@ -1,90 +1,264 @@
-<html>
+<!doctype html>
+<html lang="en">
     <head>
-        <meta charset="UTF-8" />
-        <style type="text/css">
-            * {
-                /* border: 1px solid black; */
-                border-style: none;
-                margin: 0px;
-                padding: 0px;
+        <meta charset="UTF-8"/>
+        <title>Document</title>
+    </head>
+    <body>
+        <div class="controls">
+            <div class="left">
+                <div id="playButton" class="button">
+                    ▶️ play
+                </div>
+            </div>
+            <div class="right">
+                <span>Volume: </span>
+                <input type="range" min="0.0" max="1.0" step="0.01"
+                       value="0.8" name="volume" id="volumeControl">
+            </div>
+        </div>
 
-            }
-            html,body {
-                background: #d4e1f5;
-            }
-        </style>
-<script>
-    var midi 	=null;    // MIDIAccessのglobal object
-    var inputs	=null;    // MIDI 入力ポート
-    var outputs	=null;    // MIDI 出力ポート
-    
-    window.onload = function() {
-    // sysex: false ---> System Exclusive を使わない時
-    // sysex: true  ---> System Exclusive を使う時
-    // onMIDISuccess ---> request が成功し、MIDIが使える時のコールバック関数
-    // onMIDIFailure ---> request が失敗し、MIDIが使えない時のコールバック関数
-    // ただし、Internet ExplorのようにWeb MIDI APIに対応していないブラウザーの場合、
-    // navigator.requestMIDIAccess関数が無い、というエラーになり
-    // onMIDIFailureへは飛びません。
-    navigator.requestMIDIAccess( { sysex: false } ).then( onMIDISuccess, 
-            onMIDIFailure );
-    };
-    
-    // request が成功し、MIDIが使える時のコールバック関数
-    function onMIDISuccess( midiAccess ) {
-        alert( "MIDI ready!" );    //MIDIが使える時に表示される。
-    // requestが成功すると、midiAccessに、global objectが入っているので、
-    // 保存しておきます。
-        midi = midiAccess;
-    // MIDI の入出力ポートの情報を保存しておきます。
-    // ここから ---> 
-    if (typeof midi.inputs == "function") {
-        inputs=midi.inputs();
-        outputs=midi.outputs();
-    } else {
-        var inputIterator = midi.inputs.values();
-        inputs = [];
-        for (var o = inputIterator.next(); !o.done; 
-            o = inputIterator.next()) {
-                inputs.push(o.value)
-        }
-        var outputIterator = midi.outputs.values();
-        outputs = [];
-        for (var o = outputIterator.next(); !o.done; 
-            o = outputIterator.next()) {
-                outputs.push(o.value)
-        }
-         // MIDI 入力ポートの情報表示
-        console.log("inputs number=",inputs.length);     //入力ポートの数
-        for(var i=0; i>inputs.length;i++){
-            var input=inputs[i];
-        //MIDI入力を受けたときのコールバック関数
-            inputs[i].onmidimessage = handleMIDIMessage;
-            console.log(input.name);
-        }
-        // MIDI 出力ポートの情報表示
-        console.log("outputs number=",outputs.length);     //出力ポートの数
-        for(var i=0; i<outputs.length;i++){
-            var output=outputs[i];
-            console.log(output.name);
-            output.send([0x90,0x40,0x40],0);     //Note Onを送る
-        }
-    // <--- ここまで
-    }//else}
-    
-    // request が失敗し、MIDIが使えない時のコールバック関数
-    function onMIDIFailure(msg) {
-        //MIDIが使えない時に表示される。
-        alert( "Failed to get MIDI access - " + msg );
-    }
-    
-    // MIDI を受けたときのコールバック関数
-    function handleMIDIMessage( event ) {
-        console.log(event);
-    }
-    </script>    </head>
-    <body style="width:100%;height:100%;">
+        <script>
+         // LICENSE: MIT/Apache-2.0
+         class Note {
+             constructor(step, octave, duration) {
+                 const noteTable = {
+                     "C" : -9,
+                     "C#": -8, "Cs": -8, "Df": -8,
+                     "D" : -7,
+                     "D#": -6, "Ds": -6, "Ef": -6,
+                     "E" : -5,
+                     "F" : -4,
+                     "F#": -3, "Fs": -3, "Gf": -3,
+                     "G" : -2,
+                     "G#": -1, "Gs": -1, "Af": -1,
+                     "A" :  0,
+                     "A#":  1, "As":  1, "Bf":  1,
+                     "B" :  2
+                 };
+                 this.detune = noteTable[step] * 100 + (octave - 4) * 1200;
+                 this.duration = duration;
+             }
+
+             realDuration(bpm) {
+                 bpm = bpm || 60;
+                 return 1  * (60 / bpm) / this.duration * 4;
+             }
+         }
+
+         class Tone {
+             ctx
+             concertPitch
+         }
+
+         class SimpleTone extends Tone {
+             type = 'sine';
+             constructor(type) {
+                 super()
+                 this.type = type;
+                 this.osc = null;
+             }
+
+             play(detune, start, duration, output) {
+                 const osc = this.ctx.createOscillator();
+                 osc.type = this.type;
+                 osc.frequency.value = this.concertPitch;
+                 osc.detune.value = detune;
+                 osc.connect(output);
+                 osc.onended = function() {
+                     osc.disconnect(output)
+                 };
+                 osc.start(start);
+                 osc.stop(start + duration * 0.9);
+                 return osc;
+             }
+         }
+
+         class PianoTone extends Tone {
+             createOsc(detune, gain, start, duration, output) {
+                 const attack = 0.2;
+                 const decay = 0.1;
+                 const sustain = gain * 0.7;
+                 const release = 0.3;
+
+                 const osc = this.ctx.createOscillator();
+                 osc.frequency.value = this.concertPitch;
+                 osc.detune.value = detune;
+                 osc.type = 'sine';
+
+                 const gainNode = this.ctx.createGain();
+                 const t0 = start;
+                 const t1 = t0 + attack;
+                 const t2 = t1 + decay;
+                 const t3 = t0 + duration;
+                 const t4 = t3 + release;
+                 gainNode.gain.linearRampToValueAtTime(gain, t1);
+                 gainNode.gain.setTargetAtTime(sustain, t1, decay)
+                 gainNode.gain.setTargetAtTime(0, t3, release);
+
+                 osc.connect(gainNode);
+                 gainNode.connect(output);
+                 osc.onended = function() {
+                     osc.disconnect(gainNode);
+                     gainNode.disconnect(output);
+                 }
+
+                 osc.start(t0);
+                 osc.stop(t4);
+                 return osc;
+             }
+
+             play(detune, start, duration, output) {
+                 let o1 = this.createOsc(detune - 3600, 0.512, start, duration * 0.064, output);
+                 let o2 = this.createOsc(detune - 2400, 0.64 , start, duration * 0.16 , output);
+                 let o3 = this.createOsc(detune - 1200, 0.8  , start, duration * 0.4  , output);
+                 let o4 = this.createOsc(detune       ,   1  , start, duration        , output);
+                 let o5 = this.createOsc(detune + 1200, 0.4  , start, duration * 0.8  , output);
+                 let o6 = this.createOsc(detune + 2400, 0.16 , start, duration * 0.64 , output);
+                 let o7 = this.createOsc(detune + 3600, 0.064, start, duration * 0.512, output);
+                 return {
+                     oscs: [o1, o2, o3, o4, o5, o6, o7],
+                     stop: function(when) {
+                         for(let osc of this.oscs) {
+                             osc.stop(when)
+                         }
+                     }
+                 };
+             }
+         }
+
+         class Music {
+             constructor(notes) {
+                 this.notes = notes;
+             }
+
+             [Symbol.iterator]() {
+                 return this.notes[Symbol.iterator]();
+             }
+
+             static parse(input) {
+                 const notes = [];
+
+                 let octave = 4;
+                 let duration = 4;
+                 for(let c of input.split(' ')) {
+                     if (c === '|' || c === "" || c === "\n" ) {
+                         continue;
+                     }
+
+                     let ret = c.match(/([A-G][#sf]?)([-+]*)(16|8|4|2|1)?/);
+                     if (ret) {
+                         let step = ret[1];
+                         for(let o of ret[2]) {
+                             switch (o) {
+                                 case "+": octave++;
+                                 case "-": octave--;
+                             }
+                         }
+                         if(ret[3]) {
+                             duration = parseInt(ret[3]);
+                         }
+                         notes.push(new Note(step, octave, duration));
+                     } else {
+                         throw "parse error";
+                     }
+                 }
+                 return new this(notes);
+             }
+         }
+
+         class Player {
+             constructor(bpm, tone, concertPitch) {
+                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+                 const gain = this.ctx.createConstantSource();
+                 const gainNode = this.ctx.createGain();
+                 gainNode.gain.value = 0.025;
+                 gain.connect(gainNode.gain);
+                 gain.start();
+                 gain.offset.value = 0.25;
+                 gainNode.connect(this.ctx.destination);
+
+                 this.output = gainNode;
+                 this._gain = gain;
+                 this.bpm = bpm;
+                 this.tone = tone || new SimpleTone('square');
+                 this.tone.ctx = this.ctx;
+                 this.tone.concertPitch = concertPitch || 440;
+                 this.playingNotes = [];
+                 this.isPlaying = false;
+             }
+
+             get gain() {
+                 this._gain.offset.value;
+             }
+
+             set gain(gain) {
+                 this._gain.offset.value = gain;
+
+             }
+
+             playNote(note, at) {
+                 at = at || 0;
+                 const duration = note.realDuration(this.bpm);
+                 let playingNote = this.tone.play(note.detune, at, duration, this.output);
+                 return playingNote;
+             }
+
+             playMusic(music) {
+                 this.isPlaying = true;
+                 let start = this.ctx.currentTime;
+                 for (let note of music) {
+                     let playingNote = this.playNote(note, start);
+                     start += note.realDuration(this.bpm);
+                     this.playingNotes.push(playingNote);
+                 }
+             }
+
+             cancel() {
+                 this.isPlaying = false;
+                 for(let note of this.playingNotes) {
+                     note.stop()
+                 }
+             }
+         }
+
+         // create Oscillator node
+         function setup() {
+
+             const music = Music.parse("\
+             C  C  G  G  | A  A  G2 |\
+             F4 F  E  E  | D  D  C2 |\
+             G4 G  F  F  | E  E  D2 |\
+             G4 G  F  F  | E  E  D2 |\
+             C4 C  G  G  | A  A  G2 |\
+             F4 F  E  E  | D  D  C2 |");
+             const player = new Player(90, new PianoTone());
+             function togglePlay(event) {
+                 if (player.isPlaying) {
+                     playButton.innerHTML = "▶️ play";
+                     player.cancel();
+                 } else {
+                     playButton.innerHTML = "◼ cancel";
+                     player.playMusic(music);
+                 }
+             }
+
+             function changeVolume(event) {
+                 player.gain = volumeControl.value;
+             }
+
+             const playButton = document.querySelector("#playButton");
+             const volumeControl = document.querySelector("#volumeControl");
+             volumeControl.value = player.gain;
+
+             playButton.addEventListener("click", togglePlay, false);
+             volumeControl.addEventListener("input", changeVolume, false);
+
+         }
+
+         setup();
+
+        </script>
     </body>
 </html>
-
-
