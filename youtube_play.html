@@ -29,10 +29,10 @@
             function onYouTubeIframeAPIReady() {
                 player = new YT.Player('player', {
                     width: '640',               // 動画横サイズ
-                    height: '360',              // 動画縦サイズ
-                    events : {
-                        'onStateChange' : onPlayStateChange
-                    },
+                    height: '360'              // 動画縦サイズ
+                    // events : {
+                    //     'onStateChange' : onPlayStateChange
+                    // },
                 });
             }
 
@@ -43,8 +43,8 @@
                 // 再生が終了したら次の動画を再生する
                 if (event.data == YT.PlayerState.ENDED) {
                     debug_log("State changed to ENDED");
-                    if(g_isPlayerPaused) loadMovie(nextMovie());
-                    else loadAndPlayMovie(nextMovie());
+                    // if(g_isPlayerPaused) loadMovie(nextMovie());
+                    // else loadAndPlayMovie(nextMovie());
                 }
                 // 一時停止中に次の動画へ移行した場合、(自動)再生直後に一時停止する
                 else if (event.data == YT.PlayerState.PAUSED) {
@@ -121,21 +121,23 @@
 
             // タイマーコールバック
             function onTimerVideoInfo() {
-                // 動画情報
-                let title = player.videoTitle;
-                let text_video_info =
-                    title;
-                target = document.getElementById("video_info");
-                target.innerHTML = text_video_info;
-                // 再生情報
-                let cur_tm = player.getCurrentTime().toFixed(1);
-                let mov_tm = player.getDuration().toFixed(1);
-                let play_speed = player.getPlaybackRate().toFixed(2);
-                let text_play_info =
-                    toTimeString(cur_tm) + " / " + toTimeString(mov_tm)
-                    + ", " + "(x" + play_speed.toString() + ")";
-                target = document.getElementById("play_info");
-                target.innerHTML = text_play_info;
+                if(player) {
+                    // 動画情報
+                    let title = player.videoTitle;
+                    let text_video_info =
+                        title;
+                    target = document.getElementById("video_info");
+                    target.innerHTML = text_video_info;
+                    // 再生情報
+                    let cur_tm = player.getCurrentTime().toFixed(1);
+                    let mov_tm = player.getDuration().toFixed(1);
+                    let play_speed = player.getPlaybackRate().toFixed(2);
+                    let text_play_info =
+                        toTimeString(cur_tm) + " / " + toTimeString(mov_tm)
+                        + ", " + "(x" + play_speed.toString() + ")";
+                    target = document.getElementById("play_info");
+                    target.innerHTML = text_play_info;
+                }
             }
             
             // 初期化処理
@@ -279,6 +281,35 @@
             }
 
             ////////////////////////////////////////////////////////////////////////////////
+            // ループ再生
+            ////////////////////////////////////////////////////////////////////////////////
+
+            // ループ生成ON時のコールバック
+            var loopStartTime;
+            var loopEndTime;
+            function onPlayerStateChangeForPartialLoopPlay(event) {
+                if (event.data == YT.PlayerState.ENDED) {
+                    player.seekTo(loopStartTime);
+                    player.playVideo();
+                }
+            }
+
+            // ループ再生をONにする
+            function loopOn(stm,etm) {
+                loopStartTime = stm;
+                loopEndTime = etm;
+                player.cueVideoById({videoId:currentMovieId(),startSeconds:loopStartTime,endSeconds:loopEndTime});
+                player.addEventListener('onStateChange', 'onPlayerStateChangeForPartialLoopPlay');
+            }
+
+            // ループ再生をOFFにする
+            function loopOff() {
+                // player.removeEventListener('onStateChange', 'onPlayerStateChangeForPartialLoopPlay');
+                player.addEventListener('onStateChange', null);
+                player.cueVideoById({videoId:currentMovieId()});
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////
             // デバッグ用
             ////////////////////////////////////////////////////////////////////////////////
 
@@ -321,6 +352,8 @@
                     <p><a href="javascript:playFast()">再生速度上昇</a></p>
                     <p><a href="javascript:playPrev()">前の動画</a></p>
                     <p><a href="javascript:playNext()">次の動画</a></p>
+                    <p><a href="javascript:loopOn(5,15)">ループ再生ON</a></p>
+                    <p><a href="javascript:loopOff()">ループ再生OFF</a></p>
                 </td>
                 <td style="width:50%;height:100%;">
                     <div style="width:100%;height:20%;display:flex;justify-content:center;align-items:center;">
