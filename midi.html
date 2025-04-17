@@ -1,0 +1,90 @@
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <style type="text/css">
+            * {
+                /* border: 1px solid black; */
+                border-style: none;
+                margin: 0px;
+                padding: 0px;
+
+            }
+            html,body {
+                background: #d4e1f5;
+            }
+        </style>
+<script>
+    var midi 	=null;    // MIDIAccessのglobal object
+    var inputs	=null;    // MIDI 入力ポート
+    var outputs	=null;    // MIDI 出力ポート
+    
+    window.onload = function() {
+    // sysex: false ---> System Exclusive を使わない時
+    // sysex: true  ---> System Exclusive を使う時
+    // onMIDISuccess ---> request が成功し、MIDIが使える時のコールバック関数
+    // onMIDIFailure ---> request が失敗し、MIDIが使えない時のコールバック関数
+    // ただし、Internet ExplorのようにWeb MIDI APIに対応していないブラウザーの場合、
+    // navigator.requestMIDIAccess関数が無い、というエラーになり
+    // onMIDIFailureへは飛びません。
+    navigator.requestMIDIAccess( { sysex: false } ).then( onMIDISuccess, 
+            onMIDIFailure );
+    };
+    
+    // request が成功し、MIDIが使える時のコールバック関数
+    function onMIDISuccess( midiAccess ) {
+        alert( "MIDI ready!" );    //MIDIが使える時に表示される。
+    // requestが成功すると、midiAccessに、global objectが入っているので、
+    // 保存しておきます。
+        midi = midiAccess;
+    // MIDI の入出力ポートの情報を保存しておきます。
+    // ここから ---> 
+    if (typeof midi.inputs == "function") {
+        inputs=midi.inputs();
+        outputs=midi.outputs();
+    } else {
+        var inputIterator = midi.inputs.values();
+        inputs = [];
+        for (var o = inputIterator.next(); !o.done; 
+            o = inputIterator.next()) {
+                inputs.push(o.value)
+        }
+        var outputIterator = midi.outputs.values();
+        outputs = [];
+        for (var o = outputIterator.next(); !o.done; 
+            o = outputIterator.next()) {
+                outputs.push(o.value)
+        }
+         // MIDI 入力ポートの情報表示
+        console.log("inputs number=",inputs.length);     //入力ポートの数
+        for(var i=0; i>inputs.length;i++){
+            var input=inputs[i];
+        //MIDI入力を受けたときのコールバック関数
+            inputs[i].onmidimessage = handleMIDIMessage;
+            console.log(input.name);
+        }
+        // MIDI 出力ポートの情報表示
+        console.log("outputs number=",outputs.length);     //出力ポートの数
+        for(var i=0; i<outputs.length;i++){
+            var output=outputs[i];
+            console.log(output.name);
+            output.send([0x90,0x40,0x40],0);     //Note Onを送る
+        }
+    // <--- ここまで
+    }//else}
+    
+    // request が失敗し、MIDIが使えない時のコールバック関数
+    function onMIDIFailure(msg) {
+        //MIDIが使えない時に表示される。
+        alert( "Failed to get MIDI access - " + msg );
+    }
+    
+    // MIDI を受けたときのコールバック関数
+    function handleMIDIMessage( event ) {
+        console.log(event);
+    }
+    </script>    </head>
+    <body style="width:100%;height:100%;">
+    </body>
+</html>
+
+
