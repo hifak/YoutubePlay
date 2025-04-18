@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8"/>
+        <title>Web Audio API test</title>
+        <script>
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+            class SimpleTone {
+                play(freq, detune, start, duration, output) {
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    osc.detune.value = detune;
+                    osc.connect(output);
+                    osc.onended = function() {
+                        osc.disconnect(output)
+                    };
+                    osc.start(start);
+                    osc.stop(start + duration * 0.9);
+                    return osc;
+                }
+            }
+
+            class PianoTone {
+                createOsc(freq, detune, gain, start, duration, output) {
+                    const attack = 0.2;
+                    const decay = 0.1;
+                    const sustain = gain * 0.7;
+                    const release = 0.3;
+
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    osc.detune.value = detune;
+
+                    const gainNode = audioCtx.createGain();
+                    const t0 = start;
+                    const t1 = t0 + attack;
+                    const t2 = t1 + decay;
+                    const t3 = t0 + duration;
+                    const t4 = t3 + release;
+                    gainNode.gain.linearRampToValueAtTime(gain, t1);
+                    gainNode.gain.setTargetAtTime(sustain, t1, decay)
+                    gainNode.gain.setTargetAtTime(0, t3, release);
+
+                    osc.connect(gainNode);
+                    gainNode.connect(output);
+                    osc.onended = function() {
+                        osc.disconnect(gainNode);
+                        gainNode.disconnect(output);
+                    }
+
+                    osc.start(t0);
+                    osc.stop(t4);
+                    return osc;
+                }
+
+                play(freq, detune, start, duration, output) {
+                    let o1 = this.createOsc(freq, detune - 3600, 0.512, start, duration * 0.064, output);
+                    let o2 = this.createOsc(freq, detune - 2400, 0.64 , start, duration * 0.16 , output);
+                    let o3 = this.createOsc(freq, detune - 1200, 0.8  , start, duration * 0.4  , output);
+                    let o4 = this.createOsc(freq, detune       ,   1  , start, duration        , output);
+                    let o5 = this.createOsc(freq, detune + 1200, 0.4  , start, duration * 0.8  , output);
+                    let o6 = this.createOsc(freq, detune + 2400, 0.16 , start, duration * 0.64 , output);
+                    let o7 = this.createOsc(freq, detune + 3600, 0.064, start, duration * 0.512, output);
+                    return {
+                        oscs: [o1, o2, o3, o4, o5, o6, o7],
+                        stop: function(when) {
+                            for(let osc of this.oscs) {
+                                osc.stop(when)
+                            }
+                        }
+                    };
+                }
+            }
+
+
+            function audio_play() {
+                const gain = audioCtx.createConstantSource();
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.value = 0.025;
+                gain.connect(gainNode.gain);
+                gain.start();
+                gain.offset.value = 0.25;
+                gainNode.connect(audioCtx.destination);
+                
+                let ctm = audioCtx.currentTime;
+                let tone1 = new PianoTone();
+                tone1.play(523.251, 0, ctm, ctm + 6, gainNode);
+                let tone2 = new PianoTone();
+                tone2.play(659.255, 0, ctm + 1, ctm + 5, gainNode);
+                let tone3 = new PianoTone();
+                tone3.play(783.991, 0, ctm + 2, ctm + 4, gainNode);
+            }
+
+            window.addEventListener('load', function () {
+            });
+        </script>
+    </head>
+    <body>
+        <div>
+            <input type="button" value="play" onclick="javascript:audio_play()" />
+        </div>
+    </body>
+</html>
